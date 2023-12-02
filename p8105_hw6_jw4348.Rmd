@@ -135,20 +135,13 @@ centralpark_df
 ### Then I will use 5000 bootstrap samples and produce estimates of `R square` quantities. 
 
 ```{r}
-boot_sample = function(df) {
-  
-  sample_frac(df, replace = TRUE)
-  
-}
-
-boot_results_rsquare = 
-  tibble(strap_number = 1:5000) |> 
+boot_results_rsquare =  
+  centralpark_df |> 
+  bootstrap(n = 5000) |> 
   mutate(
-    strap_sample = map(strap_number, \(i) boot_sample(centralpark_df)),
-    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = df)),
-    results = map(models, broom::glance)
-  ) |> 
-  select(strap_number, results) |> 
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df) ),
+    results = map(models, broom::glance)) |> 
+  select(-strap, -models) |> 
   unnest(results)
 ```
 
@@ -171,24 +164,25 @@ boot_results_rsquare |>
   )
 ```
 
+-  A 95% confidence interval for the `rsquared` is between **0.889** and **0.941**. This interval gives you a range of plausible values for the proportion of variance in the response variable (tmax) explained by the predictors (tmin and prcp). A high R-squared value close to 1 indicates that a large proportion of the variability in the response variable is accounted for by the predictors, suggesting a good fit of the model to the data.
+
 ### Next I will use 5000 bootstrap samples and produce estimates of `log(beta1*beta2)` quantities. 
 
 ```{r}
 boot_results_logbeta = 
-  tibble(strap_number = 1:5000) |> 
+  centralpark_df |> 
+  bootstrap(n = 5000) |> 
   mutate(
-    strap_sample = map(strap_number, \(i) boot_sample(centralpark_df)),
-    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = df)),
-    results = map(models, broom::tidy)
-  ) |> 
-  select(strap_number, results) |> 
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df) ),
+    results = map(models, broom::tidy)) |> 
+  select(-strap, -models) |> 
   unnest(results) |> 
-  select(strap_number, term, estimate) |> 
+  select(.id, term, estimate) |> 
   pivot_wider(
     names_from = term, 
     values_from = estimate) |> 
   rename(beta1 = tmin, beta2 = prcp) |>
-  mutate(log_b1b2 = log(beta1 * beta2)) 
+  mutate(log_b1b2 = log(beta1 * beta2))
 ```
 - Because there are a lot of negative values of variable `prec` resulting in **NaN** value of `log(beta1 * beta2)`.
 
@@ -214,6 +208,7 @@ boot_results_logbeta |>
 ```
 
 - Because we can't compute the 95%CI for the estimates of `NaN` values, therefore we only produce the 95% confidence interval of `log(beta1*beta2)` only restricted **non-NaN** values.
+- A 95% confidence interval for `log(beta1*beta2)` is between **-8.88** and **-4.60**. This interval is a range of plausible values for the logarithm of the product of the estimated coefficients for the predictors tmin and prcp in the linear regression model. The interval does not contain zero, it suggests that the product of the coefficients is significantly different from 1, indicating a potential interaction effect between `tmin` and `prcp`.
 
 ## Problem 3
 
