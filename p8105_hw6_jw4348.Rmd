@@ -213,3 +213,117 @@ boot_results_logbeta |>
 ```
 
 - Because we can't compute the 95%CI for the estimates of `NaN` values, therefore we only produce the 95% confidence interval of `log(beta1*beta2)` only restricted **non-NaN** values.
+
+## Problem 3
+
+### First I will load and clean the data for regression analysis, convert some variables from numeric to factor.
+
+```{r}
+birthweight_df = 
+  read_csv("data/birthweight.csv", na = c("", "NA", "Unknown")) |> 
+  mutate(
+    babysex = as.factor(babysex),
+    frace = as.factor(frace),
+    malform = as.factor(malform),
+    mrace = as.factor(mrace)
+  ) 
+
+birthweight_df
+```
+
+### Then I will check is there missing data in `birthweight_df`.
+
+```{r}
+sapply(birthweight_df, function(x) sum(is.na(x)))
+```
+- There is no any missing values in **birthweight_df**.
+
+### Then I will choose the variables I think might be factors of birthweight then fit in the model.
+
+- In my model, I will include `blength`, `malform`, `ppbmi`, `wtgain`, `smoken`, and `momage` with the reasons based on a hypothesized structure for the factors that underly birthweight:
+
+  - Mother’s Pre-pregnancy BMI (ppbmi): Maternal BMI is a crucial indicator of maternal health and nutrition status, which significantly affect fetal growth. Both underweight and overweight pre-pregnancy BMIs are associated with adverse birth outcomes.
+  
+  - Baby’s length at birth (blength): Birth length and birth weight are directly related, as both are indicators of the baby's overall size and development. A longer baby is generally expected to weigh more.
+  
+  - Mother’s Age at Delivery (momage): Maternal age can influence birth outcomes, with very young and older mothers often facing higher risks of complications that can affect the baby's birth weight.
+  
+- Presence of Malformations (malform): Any congenital malformations could potentially impact the baby's growth and development, thereby affecting birth weight. 
+
+  - Number of Cigarettes Smoked Per Day During Pregnancy (smoken): Smoking during pregnancy is a known risk factor for reduced fetal growth and low birth weight. The number of cigarettes smoked can have a dose-response relationship with birth weight.
+
+  - Mother’s Weight Gain During Pregnancy (wtgain): Weight gain during pregnancy is directly related to fetal growth. Adequate weight gain is essential for a healthy birth weight, while both insufficient and excessive gains are risk factors for low and high birth weight, respectively.
+
+```{r}
+birthweight_model =
+  lm(bwt ~ ppbmi + blength + momage + malform + smoken + wtgain, 
+     data = birthweight_df)
+
+summary(birthweight_model)
+```
+
+- Based on summary, most estimates are significant. The prediction seems pretty good.
+
+### Then I will make a plot of model residuals against fitted values.
+
+```{r}
+birthweight_df |> 
+  add_predictions(birthweight_model) |> 
+  add_residuals(birthweight_model) |> 
+  ggplot(
+    aes( x = pred, y = resid)) + 
+    geom_point(alpha = 0.5) +
+  labs(
+    title = "Model residuals against fitted values",
+    x = "Fitted Values",
+    y = "Residuals"
+      )
+```
+
+-  The bulk of the data points form a dense cloud around the zero line of residuals, indicating that for many observations, the model’s predictions are close to the actual values. However, there's a visible spread of residuals as the fitted values increase, which might indicate heteroscedasticity—meaning the variability of the residuals is not constant across all levels of the independent variable(s). 
+- Also, there are some outliers, particularly for higher fitted values, should be investigated further as they can have a significant influence on the regression model.
+
+### Then I will compare my model to two others:
+
+```{r}
+cv_df =
+  crossv_mc(birthweight_df, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)) |> 
+  mutate(
+    my_model = map(.x = train, ~lm(bwt ~ ppbmi + blength + momage + malform + smoken + wtgain, data = birthweight_df)),
+    main_model = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = birthweight_df)),
+    interaction_model = map(.x = train, ~lm(bwt ~ bhead + blength + babysex + bhead * blength + blength * babysex + bhead * babysex + bhead * blength * babysex, data = birthweight_df))
+         ) |> 
+   mutate(
+    rmse_my = map2_dbl(my_model, test, ~rmse(model = .x, data = .y)),
+    rmse_main = map2_dbl(main_model, test, ~rmse(model = .x, data = .y)),
+    rmse_interaction = map2_dbl(interaction_model, test, ~rmse(model = .x, data = .y))
+         )
+```
+
+- **my_model** is the model based on a hypothesized structure for the factors that underly birthweight I made previously.
+- **main_model** is the model using length at birth and gestational age as predictors (main effects only).
+- **interaction_model** is the model using head circumference, length, sex, and all interactions (including the three-way interaction) between these.
+
+### Finally, I’ll plot the prediction error distribution for each candidate model.
+
+```{r}
+cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse, color = model)) + 
+    geom_violin() +
+    labs(
+      title = "Comparison of Cross-Validated Prediction Errors for Birth Weight Models"
+        )
+```
+
+- From the violin plot, `my_model` has similar rmse performance of `main_model`. And `interaction_model` has the best performance because of lowest overall rmse value.
+- Possible reason of bad performance of `my_model` can be extremely outlier in some variables influence rmse, cause we can clearly see some outliers in the graph of **Model residuals against fittted values** previously.
