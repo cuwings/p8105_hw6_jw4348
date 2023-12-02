@@ -101,3 +101,115 @@ model_results |>
   geom_errorbar(aes(ymin = OR_CI_lower, ymax = OR_CI_upper)) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
+
+## Problem 2
+
+### First, I will download the Central Park weather data.
+
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2022-01-01",
+    date_max = "2022-12-31") |>
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) |>
+  select(name, id, everything())
+```
+
+### Then I will clean the dataset.
+
+```{r}
+centralpark_df = 
+  weather_df |> 
+  drop_na(prcp, tmax, tmin) |> 
+  select(id, tmax, tmin, prcp)
+
+centralpark_df
+```
+
+### Then I will use 5000 bootstrap samples and produce estimates of `R square` quantities. 
+
+```{r}
+boot_sample = function(df) {
+  
+  sample_frac(df, replace = TRUE)
+  
+}
+
+boot_results_rsquare = 
+  tibble(strap_number = 1:5000) |> 
+  mutate(
+    strap_sample = map(strap_number, \(i) boot_sample(centralpark_df)),
+    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results = map(models, broom::glance)
+  ) |> 
+  select(strap_number, results) |> 
+  unnest(results)
+```
+
+### Then I will Plot the distribution of `rsquare`.
+```{r}
+boot_results_rsquare |> 
+  ggplot(aes(x = r.squared)) +
+  geom_density()
+```
+
+- The plot is a left-skewed of R-squared values from 5000 bootstrap samples, centered around 0.913, indicating a model fit that explains about 91.3% of the variance in the maximum temperature, based on minimum temperature and precipitation. The longer tail towards lower values indicates some samples with less explained variance, possibly due to variability or outliers in those samples.
+
+### Then I will construct `95% confidence interval` of rsquare
+
+```{r}
+boot_results_rsquare |> 
+  summarize(
+    ci_lower = quantile(r.squared, 0.025),
+    ci_upper = quantile(r.squared, 0.975)
+  )
+```
+
+### Next I will use 5000 bootstrap samples and produce estimates of `log(beta1*beta2)` quantities. 
+
+```{r}
+boot_results_logbeta = 
+  tibble(strap_number = 1:5000) |> 
+  mutate(
+    strap_sample = map(strap_number, \(i) boot_sample(centralpark_df)),
+    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results = map(models, broom::tidy)
+  ) |> 
+  select(strap_number, results) |> 
+  unnest(results) |> 
+  select(strap_number, term, estimate) |> 
+  pivot_wider(
+    names_from = term, 
+    values_from = estimate) |> 
+  rename(beta1 = tmin, beta2 = prcp) |>
+  mutate(log_b1b2 = log(beta1 * beta2)) 
+```
+- Because there are a lot of negative values of variable `prec` resulting in **NaN** value of `log(beta1 * beta2)`.
+
+### Then I will Plot the distribution of `log(beta1*beta2)`.
+
+```{r}
+boot_results_logbeta |> 
+  ggplot(aes(x = log_b1b2)) +
+  geom_density()
+```
+
+- The plot is a left-skewed of R-squared values from 5000 bootstrap samples, centered around -5.5. This skew suggests outliers with small products of β1 and β2, influencing the shape of the distribution.
+
+### Then I will construct `95% confidence interval` of log(beta1*beta2).
+
+```{r}
+boot_results_logbeta |> 
+  filter(log_b1b2 != "NaN") |>
+  summarize(
+    ci_lower = quantile(log_b1b2, 0.025),
+    ci_upper = quantile(log_b1b2, 0.975)
+  )
+```
+
+- Because we can't compute the 95%CI for the estimates of `NaN` values, therefore we only produce the 95% confidence interval of `log(beta1*beta2)` only restricted **non-NaN** values.
