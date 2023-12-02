@@ -158,7 +158,7 @@ boot_results_rsquare |>
   geom_density()
 ```
 
-- The plot is a left-skewed of R-squared values from 5000 bootstrap samples, centered around 0.913, indicating a model fit that explains about 91.3% of the variance in the maximum temperature, based on minimum temperature and precipitation. The longer tail towards lower values indicates some samples with less explained variance, possibly due to variability or outliers in those samples.
+- The plot is a left-skewed of R-squared values from 5000 bootstrap samples, centered around 0.92, indicating a model fit that explains around 92% of the variance in the maximum temperature, based on minimum temperature and precipitation. The longer tail towards lower values indicates some samples with less explained variance, possibly due to variability or outliers in those samples.
 
 ### Then I will construct `95% confidence interval` of rsquare
 
@@ -248,7 +248,7 @@ sapply(birthweight_df, function(x) sum(is.na(x)))
   
   - Mother’s Age at Delivery (momage): Maternal age can influence birth outcomes, with very young and older mothers often facing higher risks of complications that can affect the baby's birth weight.
   
-- Presence of Malformations (malform): Any congenital malformations could potentially impact the baby's growth and development, thereby affecting birth weight. 
+  - Presence of Malformations (malform): Any congenital malformations could potentially impact the baby's growth and development, thereby affecting birth weight. 
 
   - Number of Cigarettes Smoked Per Day During Pregnancy (smoken): Smoking during pregnancy is a known risk factor for reduced fetal growth and low birth weight. The number of cigarettes smoked can have a dose-response relationship with birth weight.
 
@@ -262,7 +262,8 @@ birthweight_model =
 summary(birthweight_model)
 ```
 
-- Based on summary, most estimates are significant. The prediction seems pretty good.
+- Based on summary, most estimates are significant except the `malform`. The prediction seems pretty good.
+- Variables `ppbmi`, `blength`, `momage`, `malform`, and `wtgain` have positive association with **baby's weight**. `smoken` has negative association with **baby's weight**. 
 
 ### Then I will make a plot of model residuals against fitted values.
 
